@@ -1,22 +1,44 @@
+// Inject Camera Virtualization Patch
+const vcamScript = document.createElement('script');
+vcamScript.src = chrome.runtime.getURL('camera_patch.js');
+vcamScript.onload = () => vcamScript.remove();
+(document.head || document.documentElement).appendChild(vcamScript);
+
 let loopInterval = null;
 let isProcessingQuiz = false;
 
 // Initialize
-chrome.storage.local.get(['autoEnabled'], (result) => {
+chrome.storage.local.get(['autoEnabled', 'vcamEnabled', 'vcamSource'], (result) => {
+    if (result.vcamEnabled) {
+        updateVCam(true, result.vcamSource);
+    }
     if (result.autoEnabled) {
         startAutomation();
     }
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.autoEnabled) {
-        if (changes.autoEnabled.newValue) {
-            startAutomation();
-        } else {
-            stopAutomation();
+    if (namespace === 'local') {
+        if (changes.autoEnabled) {
+            if (changes.autoEnabled.newValue) {
+                startAutomation();
+            } else {
+                stopAutomation();
+            }
+        }
+        if (changes.vcamEnabled || changes.vcamSource) {
+            chrome.storage.local.get(['vcamEnabled', 'vcamSource'], (result) => {
+                updateVCam(result.vcamEnabled, result.vcamSource);
+            });
         }
     }
 });
+
+function updateVCam(enabled, source) {
+    window.dispatchEvent(new CustomEvent('vibe-update-vcam', {
+        detail: { enabled: !!enabled, source: source || null }
+    }));
+}
 
 function startAutomation() {
     if (loopInterval) return;
@@ -168,6 +190,8 @@ async function checkPageState() {
        }
     }
 }
+
+
 
 async function solveQuiz(enrichedPayload, optionsTextList, optionEls, submitButton) {
     console.log("ViBe Auto: Sending Quiz Payload to AI...");

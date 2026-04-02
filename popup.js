@@ -4,14 +4,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelChoiceInput = document.getElementById('modelChoice');
     const saveBtn = document.getElementById('saveKeyBtn');
     const toggleAutoBtn = document.getElementById('toggleAutoBtn');
+    const toggleVCamBtn = document.getElementById('toggleVCamBtn');
+    const vcamFileSection = document.getElementById('vcamGallerySection');
+    const vcamFileInput = document.getElementById('vcamFileInput');
+    const vcamFileNameDisplay = document.getElementById('vcamFileName');
     const saveStatus = document.getElementById('saveStatus');
 
     // Load saved data
-    chrome.storage.local.get(['geminiApiKey', 'groqApiKey', 'modelChoice', 'autoEnabled'], (result) => {
+    chrome.storage.local.get(['geminiApiKey', 'groqApiKey', 'modelChoice', 'autoEnabled', 'vcamEnabled', 'vcamFileName'], (result) => {
         if (result.geminiApiKey) geminiKeyInput.value = result.geminiApiKey;
         if (result.groqApiKey) groqKeyInput.value = result.groqApiKey;
         if (result.modelChoice) modelChoiceInput.value = result.modelChoice;
+        if (result.vcamFileName) vcamFileNameDisplay.innerText = result.vcamFileName;
         updateToggleBtn(result.autoEnabled);
+        updateVCamBtn(result.vcamEnabled);
     });
 
     // Save Settings
@@ -35,6 +41,49 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     });
+
+    // Toggle VCam
+    toggleVCamBtn.addEventListener('click', () => {
+        chrome.storage.local.get(['vcamEnabled'], (result) => {
+            const newState = !result.vcamEnabled;
+            chrome.storage.local.set({ vcamEnabled: newState }, () => {
+                updateVCamBtn(newState);
+            });
+        });
+    });
+
+    // Handle Gallery File Input
+    vcamFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            vcamFileNameDisplay.innerText = file.name;
+            if (file.size > 5 * 1024 * 1024) {
+                alert("Large video detected (>5MB). If the feed fails, try a smaller or shorter video clip.");
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                chrome.storage.local.set({ 
+                    vcamSource: event.target.result,
+                    vcamFileName: file.name
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function updateVCamBtn(isEnabled) {
+        if (isEnabled) {
+            toggleVCamBtn.innerText = 'VCam: ON';
+            toggleVCamBtn.style.backgroundColor = '#d4edda';
+            toggleVCamBtn.style.color = '#155724';
+            vcamFileSection.style.display = 'block';
+        } else {
+            toggleVCamBtn.innerText = 'VCam: OFF';
+            toggleVCamBtn.style.backgroundColor = '#f8d7da';
+            toggleVCamBtn.style.color = '#721c24';
+            vcamFileSection.style.display = 'none';
+        }
+    }
 
     function updateToggleBtn(isEnabled) {
         if (isEnabled) {

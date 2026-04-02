@@ -23,11 +23,19 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://vibe.vicharanashala.ai/*"],
+      "matches": [
+        "https://vibe.vicharanashala.ai/*"
+      ],
       "js": ["content.js"]
     }
   ],
   "action": {
     "default_popup": "popup.html"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["camera_patch.js"],
+      "matches": ["https://vibe.vicharanashala.ai/*"]
+    }
+  ]
 }
