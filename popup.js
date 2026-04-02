@@ -8,14 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const vcamFileSection = document.getElementById('vcamGallerySection');
     const vcamFileInput = document.getElementById('vcamFileInput');
     const vcamFileNameDisplay = document.getElementById('vcamFileName');
+    const vidSpeedInput = document.getElementById('vidSpeed');
     const saveStatus = document.getElementById('saveStatus');
 
     // Load saved data
-    chrome.storage.local.get(['geminiApiKey', 'groqApiKey', 'modelChoice', 'autoEnabled', 'vcamEnabled', 'vcamFileName'], (result) => {
+    chrome.storage.local.get(['geminiApiKey', 'groqApiKey', 'modelChoice', 'autoEnabled', 'vcamEnabled', 'vcamFileName', 'vidSpeed'], (result) => {
         if (result.geminiApiKey) geminiKeyInput.value = result.geminiApiKey;
         if (result.groqApiKey) groqKeyInput.value = result.groqApiKey;
         if (result.modelChoice) modelChoiceInput.value = result.modelChoice;
         if (result.vcamFileName) vcamFileNameDisplay.innerText = result.vcamFileName;
+        if (result.vidSpeed) vidSpeedInput.value = result.vidSpeed;
         updateToggleBtn(result.autoEnabled);
         updateVCamBtn(result.vcamEnabled);
     });
@@ -40,6 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateToggleBtn(newState);
             });
         });
+    });
+
+    // Handle Vid Speed change
+    vidSpeedInput.addEventListener('change', () => {
+        chrome.storage.local.set({ vidSpeed: vidSpeedInput.value });
     });
 
     // Toggle VCam

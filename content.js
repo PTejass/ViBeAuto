@@ -6,14 +6,24 @@ vcamScript.onload = () => vcamScript.remove();
 
 let loopInterval = null;
 let isProcessingQuiz = false;
+let forcedVideoSpeed = 1.0;
 
 // Initialize
-chrome.storage.local.get(['autoEnabled', 'vcamEnabled', 'vcamSource'], (result) => {
-    if (result.vcamEnabled) {
-        updateVCam(true, result.vcamSource);
-    }
-    if (result.autoEnabled) {
-        startAutomation();
+chrome.storage.local.get(['autoEnabled', 'vcamEnabled', 'vcamSource', 'vidSpeed'], (result) => {
+    if (result.vidSpeed) forcedVideoSpeed = parseFloat(result.vidSpeed);
+    
+    // Start speed enforcement loop immediately in all contexts
+    setInterval(enforceVideoSpeed, 1000);
+
+    const isMainSite = window.location.hostname === 'vibe.vicharanashala.ai';
+
+    if (isMainSite) {
+        if (result.vcamEnabled) {
+            updateVCam(true, result.vcamSource);
+        }
+        if (result.autoEnabled) {
+            startAutomation();
+        }
     }
 });
 
@@ -30,6 +40,10 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             chrome.storage.local.get(['vcamEnabled', 'vcamSource'], (result) => {
                 updateVCam(result.vcamEnabled, result.vcamSource);
             });
+        }
+        if (changes.vidSpeed) {
+            forcedVideoSpeed = parseFloat(changes.vidSpeed.newValue || 1.0);
+            enforceVideoSpeed(); // Immediate apply
         }
     }
 });
@@ -189,6 +203,18 @@ async function checkPageState() {
             }
        }
     }
+}
+
+function enforceVideoSpeed() {
+    const speed = parseFloat(forcedVideoSpeed);
+    if (isNaN(speed) || speed === 1.0) return;
+
+    document.querySelectorAll('video').forEach(video => {
+        if (Math.abs(video.playbackRate - speed) > 0.01) {
+            video.playbackRate = speed;
+            video.defaultPlaybackRate = speed; // Also set default to prevent reset
+        }
+    });
 }
 
 
