@@ -1,4 +1,3 @@
-
 ViBeAuto is a Browser extension for you know what.
 
 ## How to use
@@ -10,3 +9,8 @@ ViBeAuto is a Browser extension for you know what.
 - Click on "Load unpacked"
 - Select the extracted folder
 - Extension added, now set up and run it
+
+### Notes
+- require API Keys - Groq API Key or Gemini API Key
+- Tested on chrome browser only
+- hands free working :P
