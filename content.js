@@ -12,10 +12,14 @@ let loopInterval = null;
 let isProcessingQuiz = false;
 let forcedVideoSpeed = 1.0;
 let rateLimitCounter = 0;
+let quizAttempts = {}; // Store quiz attempts: { quizId: { attempts: [{ q, userAns, correctAns, score }], currentAttempt: 0 } }
+let currentQuizScore = null;
+let isRetryingQuiz = false;
 
 // Initialize and Start Feature Enforcement
-chrome.storage.local.get(['autoEnabled', 'vcamEnabled', 'vcamSource', 'vidSpeed', 'speedEnabled'], (res) => {
+chrome.storage.local.get(['autoEnabled', 'vcamEnabled', 'vcamSource', 'vidSpeed', 'speedEnabled', 'quizAttempts'], (res) => {
     forcedVideoSpeed = parseFloat(res.vidSpeed || 11);
+    quizAttempts = res.quizAttempts || {};
     
     // Constant enforcement loop
     setInterval(() => {
@@ -44,6 +48,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             chrome.storage.local.get(['vcamEnabled', 'vcamSource'], (res) => updateVCam(res.vcamEnabled, res.vcamSource));
         }
         if (changes.vidSpeed) forcedVideoSpeed = parseFloat(changes.vidSpeed.newValue || 11);
+        if (changes.quizAttempts) quizAttempts = changes.quizAttempts.newValue || {};
     }
 });
 
@@ -88,6 +93,46 @@ async function checkPageState() {
     });
 
     const bodyText = (document.body.innerText || document.body.textContent).toLowerCase();
+
+    // TRIAL-AND-ERROR: Check for failed quiz with "rewatch video" prompt
+    if (bodyText.includes('rewatch') && (bodyText.includes('video') || bodyText.includes('incorrect') || bodyText.includes('wrong'))) {
+        const match = bodyText.match(/you scored\s+(\d+)%/);
+        if (match) {
+            const score = parseInt(match[1]);
+            if (score < 100) {
+                console.log(`[ViBe Auto] Quiz Failed with ${score}%. Detecting rewatch prompt...`);
+                currentQuizScore = score;
+                
+                // Look for "Rewatch Video" or continue button
+                const rewatchBtn = clickable.find(el => {
+                    const t = getText(el);
+                    return t.includes('rewatch') || (t.includes('continue') && bodyText.includes('rewatch'));
+                });
+                
+                if (rewatchBtn && !rewatchBtn.dataset.vibePending) {
+                    rewatchBtn.dataset.vibePending = "true";
+                    console.log(`[ViBe Auto] Clicking rewatch button to retry...`);
+                    setTimeout(() => simulateClick(rewatchBtn), 1000);
+                }
+                return;
+            }
+        }
+    }
+
+    // TRIAL-AND-ERROR: Check for 100% score success
+    if (bodyText.includes('you scored') && bodyText.includes('100')) {
+        console.log(`[ViBe Auto] 🎉 Quiz completed with 100%! Clearing attempt history.`);
+        // Clear attempts for this quiz
+        chrome.storage.local.set({ quizAttempts: {} });
+        quizAttempts = {};
+        currentQuizScore = null;
+        
+        if (actionBtn && !actionBtn.dataset.vibePending) {
+            actionBtn.dataset.vibePending = "true";
+            setTimeout(() => simulateClick(actionBtn), 1000);
+        }
+        return;
+    }
 
     // SCENARIO -1: Error/Popup Bypass
     if (bodyText.includes('failed to stop video') || bodyText.includes('unable to save progress')) {
@@ -176,6 +221,27 @@ function enforceVideoFeatures(applySpeed) {
 
 async function solveQuiz(payload, optionsText, optionEls, submitButton) {
     return new Promise((res) => {
+        // Generate a quiz identifier based on content hash
+        const quizHash = payload.split('\n')[0].substring(0, 50);
+        
+        // Check if we have a stored correct answer from a previous attempt
+        if (quizAttempts[quizHash] && quizAttempts[quizHash].correctAnswer) {
+            console.log(`[ViBe Auto] Using stored correct answer from previous attempt!`);
+            const storedCorrectAns = quizAttempts[quizHash].correctAnswer.toLowerCase();
+            
+            let matched = optionEls.find((el, i) => {
+                const opt = optionsText[i].toLowerCase();
+                return storedCorrectAns.includes(opt) || opt.includes(storedCorrectAns);
+            });
+            
+            if (matched) {
+                simulateClick(matched);
+                setTimeout(() => { if (submitButton) simulateClick(submitButton); res({ success: true, rateLimit: false }); }, 1500);
+                return;
+            }
+        }
+
+        // If no stored answer, call AI to solve
         chrome.runtime.sendMessage({ action: "solveQuiz", questionData: { question: payload, options: optionsText } }, (resp) => {
             if (!resp || resp.error) {
                 res({ success: false, rateLimit: (resp && resp.error === "RATE_LIMIT_HIT") }); 
@@ -187,9 +253,17 @@ async function solveQuiz(payload, optionsText, optionEls, submitButton) {
                 return aiAns.includes(opt) || opt.includes(aiAns);
             });
             if (matched) {
+                // Store the answer for retry purposes
+                if (!quizAttempts[quizHash]) {
+                    quizAttempts[quizHash] = { attempts: [], correctAnswer: null };
+                }
+                quizAttempts[quizHash].correctAnswer = resp.answer;
+                
                 simulateClick(matched);
                 setTimeout(() => { if (submitButton) simulateClick(submitButton); res({ success: true, rateLimit: false }); }, 1500); 
-            } else { res({ success: false, rateLimit: false }); }
+            } else { 
+                res({ success: false, rateLimit: false }); 
+            }
         });
     });
 }
